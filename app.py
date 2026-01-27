@@ -38,11 +38,13 @@ st.markdown("""
 @st.cache_data
 def load_data():
     """Load the Olympic dataset"""
-    try:
-        df = pd.read_csv('olympic_dataset.csv')
-        return df
-    except:
-        return None
+    # You'll need to provide the path to your CSV file
+    # For now, creating a sample data structure
+    # Replace this with: df = pd.read_csv('your_olympic_data.csv')
+    
+    # Sample data structure (replace with actual file loading)
+    st.warning("⚠️ Please upload your Olympic dataset CSV file or update the file path in the code.")
+    return None
 
 # Data processing functions
 def prepare_data(df):
@@ -69,10 +71,10 @@ def prepare_data(df):
 
 def get_medal_summary(df):
     """Get overall medal summary statistics"""
-    total_medals = int(df['Total_Medals'].sum())
-    total_gold = int(df['Gold'].sum())
-    total_silver = int(df['Silver'].sum())
-    total_bronze = int(df['Bronze'].sum())
+    total_medals = df['Total_Medals'].sum()
+    total_gold = df['Gold'].sum()
+    total_silver = df['Silver'].sum()
+    total_bronze = df['Bronze'].sum()
     total_athletes = df['Athlete'].nunique()
     total_countries = df['Country'].nunique()
     
@@ -132,16 +134,17 @@ def main():
     st.title("🏅 Olympic Medal Analysis Dashboard")
     st.markdown("### Comprehensive analysis of Olympic medal winners and performance statistics")
     
-    # Load data
-    df = load_data()
+    # File uploader
+    uploaded_file = st.file_uploader("Upload your Olympic dataset (CSV)", type=['csv'])
     
-    if df is not None:
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
         df = prepare_data(df)
         
         # Sidebar filters
         st.sidebar.header("🔍 Filters")
         
-        # Year filter - FIX: Handle NaN values properly
+        # Year filter
         years = sorted([int(y) for y in df['Year'].dropna().unique() if pd.notna(y)])
         selected_years = st.sidebar.multiselect(
             "Select Years",
@@ -149,16 +152,16 @@ def main():
             default=years
         )
         
-        # Country filter - FIX: Handle NaN values properly
-        countries = sorted([str(c) for c in df['Country'].dropna().unique() if pd.notna(c)])
+        # Country filter
+        countries = sorted([c for c in df['Country'].dropna().unique() if pd.notna(c)])
         selected_countries = st.sidebar.multiselect(
             "Select Countries",
             options=countries,
             default=[]
         )
         
-        # Sport filter - FIX: Handle NaN values properly
-        sports = sorted([str(s) for s in df['Sport'].dropna().unique() if pd.notna(s)])
+        # Sport filter
+        sports = sorted([s for s in df['Sport'].dropna().unique() if pd.notna(s)])
         selected_sports = st.sidebar.multiselect(
             "Select Sports",
             options=sports,
@@ -240,6 +243,32 @@ def main():
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
                 st.plotly_chart(fig, use_container_width=True)
+            
+            st.subheader("Gold Medal Proportion by Country")
+            gold_prop = get_gold_proportion(filtered_df).head(20)
+            
+            fig = px.bar(
+                x=gold_prop.index,
+                y=gold_prop.values,
+                labels={'x': 'Country', 'y': 'Proportion of Gold Medals'},
+                color=gold_prop.values,
+                color_continuous_scale='YlOrRd'
+            )
+            fig.update_layout(showlegend=False, height=400)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.subheader("Number of Athletes per Country")
+            athletes_country = get_athletes_per_country(filtered_df).head(20)
+            
+            fig = px.treemap(
+                names=athletes_country.index,
+                parents=[""] * len(athletes_country),
+                values=athletes_country.values,
+                color=athletes_country.values,
+                color_continuous_scale='Greens'
+            )
+            fig.update_layout(height=500)
+            st.plotly_chart(fig, use_container_width=True)
         
         with tab2:
             st.header("Top Athletes Analysis")
@@ -327,6 +356,13 @@ def main():
                 )
                 fig.update_xaxes(tickangle=45)
                 st.plotly_chart(fig, use_container_width=True)
+            
+            st.subheader("All Sports Medal Count")
+            st.dataframe(
+                medals_by_sport.to_frame('Total Medals').reset_index(),
+                height=400,
+                use_container_width=True
+            )
         
         with tab4:
             st.header("Year-by-Year Analysis")
@@ -363,17 +399,54 @@ def main():
                 )
                 fig.update_layout(height=400)
                 st.plotly_chart(fig, use_container_width=True)
+            
+            st.subheader(f"Complete Rankings for {selected_year}")
+            st.dataframe(
+                year_medals.to_frame('Total Medals').reset_index(),
+                height=400,
+                use_container_width=True
+            )
         
         with tab5:
             st.header("Performance Trends")
+            
+            st.subheader("Countries with Greatest Improvement")
+            
+            try:
+                improvement = calculate_improvement(filtered_df)
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    top_improvement = improvement.head(15)
+                    
+                    fig = px.bar(
+                        x=top_improvement['Country'],
+                        y=top_improvement['Delta'],
+                        labels={'x': 'Country', 'y': 'Medal Increase'},
+                        color=top_improvement['Delta'],
+                        color_continuous_scale='Greens'
+                    )
+                    fig.update_layout(showlegend=False, height=400)
+                    fig.update_xaxes(tickangle=45)
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    st.dataframe(
+                        improvement[['Country', 'Year', 'Total_Medals', 'Delta']].head(20),
+                        height=400,
+                        use_container_width=True
+                    )
+            except Exception as e:
+                st.error(f"Could not calculate improvement trends: {e}")
             
             st.subheader("Medal Count Over Years")
             
             # Select countries for trend analysis
             trend_countries = st.multiselect(
                 "Select countries to compare",
-                options=countries,
-                default=list(get_top_countries(df, 5).index) if len(countries) > 0 else []
+                options=sorted(df['Country'].unique()),
+                default=list(get_top_countries(df, 5).index)
             )
             
             if trend_countries:
@@ -394,17 +467,30 @@ def main():
         st.markdown("---")
         st.subheader("📥 Download Filtered Data")
         
-        csv = filtered_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Download as CSV",
-            data=csv,
-            file_name="olympic_filtered_data.csv",
-            mime="text/csv"
-        )
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            csv = filtered_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Download as CSV",
+                data=csv,
+                file_name="olympic_filtered_data.csv",
+                mime="text/csv"
+            )
+        
+        with col2:
+            summary_data = pd.DataFrame([summary])
+            summary_csv = summary_data.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Download Summary",
+                data=summary_csv,
+                file_name="olympic_summary.csv",
+                mime="text/csv"
+            )
     
     else:
-        st.error("⚠️ Could not load the Olympic dataset. Please make sure 'olympic_dataset.csv' exists in the app directory.")
-        st.info("""
+        st.info("👆 Please upload your Olympic dataset CSV file to begin the analysis.")
+        st.markdown("""
         ### Expected Data Format
         Your CSV file should contain the following columns:
         - **Athlete**: Name of the athlete
